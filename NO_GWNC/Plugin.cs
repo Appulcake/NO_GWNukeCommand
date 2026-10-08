@@ -90,15 +90,18 @@ internal sealed class NukeCommand : ConfigurableCommand, IGameCommand
     public override string OutputName => "nuke";
     
     public override string Description =>
-        "Nuke a player (who's spawned in) with a 250kt nuke. Optional modes: stealth, safe, or unsafe.";
+        "Nuke a player (who's spawned in) with a 250kt nuke. Optional modes: stealth, safe, or unsafe. Use !all to nuke everyone.";
     
-    public override string Usage => "nuke <player name / ID / SteamID> [stealth|safe|unsafe]";
+    public override string Usage => "nuke <player name / ID / SteamID> [stealth|safe|unsafe] | nuke !all";
     
     public UniTask<bool> Validate(Player player, string[] args) =>
         UniTask.FromResult(TryParseArguments(args, out _, out _));
     
     public UniTask<(bool success, string? response)> Execute(Player player, string[] args)
     {
+        if (args.Length == 1 && args[0].Equals("!all", StringComparison.OrdinalIgnoreCase))
+            return ExecuteNukeAll();
+        
         if (!TryParseArguments(args, out var targetText, out var mode))
             return Result(false, $"Usage: {Usage}");
         
@@ -164,6 +167,45 @@ internal sealed class NukeCommand : ConfigurableCommand, IGameCommand
         
         mode = NukeMode.Public;
         return false;
+    }
+    
+    private static UniTask<(bool success, string? response)> ExecuteNukeAll()
+    {
+        var targets = new List<Player>();
+        foreach (var connection in Globals.AuthenticatedPlayers)
+        {
+            if (!connection.TryGetPlayer<Player>(out var targetPlayer) || targetPlayer == null)
+                continue;
+            
+            if (targetPlayer.Aircraft == null || targetPlayer.Aircraft.disabled)
+                continue;
+            
+            targets.Add(targetPlayer);
+        }
+        
+        if (targets.Count == 0)
+            return Result(false, "There are no spawned players to nuke.");
+        
+        var nuked = 0;
+        var failed = 0;
+        
+        foreach (var targetPlayer in targets)
+        {
+            if (NukeService.TrySmite(targetPlayer, NukeMode.Public, out var error))
+            {
+                nuked++;
+            }
+            else
+            {
+                failed++;
+                Plugin.Log.LogWarning(
+                    $"Failed to nuke {targetPlayer.GetDisplayName()} ({targetPlayer.SteamID}) during !all: {error}");
+            }
+        }
+        
+        return Result(nuked > 0, failed == 0
+                ? $"Nuked all {nuked} spawned players."
+                : $"Nuked {nuked} spawned players; {failed} failed.");
     }
     
     private static UniTask<(bool success, string? response)> Result(bool success, string response) =>
@@ -376,7 +418,7 @@ internal sealed class NukeVisibility : INetworkVisibility
         // actually happen on server's end and thus won't cause direct damage as that's server sided
         // Exception is for unsafe mode where the server is included so it causes actual damage
         if (observer == server.LocalPlayer)
-            return _mode == NukeMode.Unsafe;;
+            return _mode == NukeMode.Unsafe;
         
         if (observer == _targetOwner)
             return true;

@@ -7,7 +7,7 @@
         <TargetFramework>net48</TargetFramework>
         <AssemblyName>Apul.NO_GWNukeCommand</AssemblyName>
         <RootNamespace>NO_GWNC</RootNamespace>
-        <Version>0.34.2.1</Version>
+        <Version>0.34.2.2</Version>
 
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
         <LangVersion>latest</LangVersion>
